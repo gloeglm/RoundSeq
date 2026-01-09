@@ -40,14 +40,10 @@ class RoundSeqApp(App):
         # Set background color
         Window.clearcolor = COLORS["background"]
 
-        if is_raspberry_pi():
-            # Fullscreen on Pi
-            Window.fullscreen = "auto"
-        else:
+        if not is_raspberry_pi():
             # Windowed on desktop
             Window.fullscreen = False
             Window.size = (DISPLAY_WIDTH, DISPLAY_HEIGHT)
-            # Center the window
             Window.left = 100
             Window.top = 100
 
@@ -67,6 +63,11 @@ def run():
 
     # Disable multitouch emulation (red dots on right-click)
     Config.set("input", "mouse", "mouse,multitouch_on_demand")
+
+    # On Raspberry Pi, use simpler fullscreen mode
+    if is_raspberry_pi():
+        Config.set("graphics", "fullscreen", "0")  # Start windowed, then go fullscreen
+        Config.set("graphics", "borderless", "1")
 
     app = RoundSeqApp()
     app.run()

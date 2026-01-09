@@ -84,6 +84,10 @@ class CenterDisplay(Widget):
         self._note_label = None
         self._btn_up = None
         self._btn_down = None
+        self._btn_up_label = None
+        self._btn_down_label = None
+        self._bg_ellipse = None
+        self._setup_done = False
 
         Clock.schedule_once(self._setup, 0)
         self.bind(pos=self._update_positions, size=self._update_positions)
@@ -93,6 +97,7 @@ class CenterDisplay(Widget):
         self._draw_background()
         self._create_labels()
         self._create_buttons()
+        self._setup_done = True
         self._update_positions()
 
     def _draw_background(self):
@@ -154,10 +159,13 @@ class CenterDisplay(Widget):
 
     def _update_positions(self, *args):
         """Update positions of all elements."""
+        if not self._setup_done:
+            return
+
         cx, cy = self.center_x, self.center_y
 
         # Update background
-        if hasattr(self, "_bg_ellipse"):
+        if self._bg_ellipse:
             self._bg_ellipse.pos = (cx - self.radius, cy - self.radius)
             self._bg_ellipse.size = (self.radius * 2, self.radius * 2)
 

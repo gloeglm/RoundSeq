@@ -1,4 +1,5 @@
 """Real MIDI service using python-rtmidi via mido."""
+from __future__ import annotations
 
 from typing import Optional
 

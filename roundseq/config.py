@@ -1,4 +1,5 @@
 """Configuration for RoundSeq."""
+from __future__ import annotations
 
 from .platform import is_raspberry_pi
 

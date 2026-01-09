@@ -1,4 +1,5 @@
 """Pie slice button widget for circular note layout."""
+from __future__ import annotations
 
 import math
 

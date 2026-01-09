@@ -58,10 +58,12 @@ The app auto-detects the environment and configures accordingly:
 | Layer | Technology | Purpose |
 |-------|------------|---------|
 | OS (dev) | macOS | Development environment |
-| OS (prod) | Raspberry Pi OS Lite | Minimal footprint, no desktop |
-| UI Framework | Kivy + KivyMD | Touch UI with circular layout support |
+| OS (prod) | Raspberry Pi OS (32-bit Legacy for older Pis) | Tested on Buster |
+| UI Framework | Kivy | Touch UI with circular layout support |
 | MIDI | mido + python-rtmidi | MIDI message handling |
 | Audio Backend (prod) | ALSA + Pisound | Hardware MIDI interface |
+
+**Note**: python-rtmidi may fail to install on older Pis (armv7l). The app falls back to mock MIDI.
 
 ## Architecture
 
@@ -123,21 +125,25 @@ Safe area calculations:
 **Goal**: Simple UI with touchable note buttons that send MIDI
 
 #### Phase 1A: Local Development (macOS)
-- [ ] Project setup (venv, dependencies, folder structure)
-- [ ] Kivy app skeleton with 1080×1080 window
-- [ ] Platform detection (macOS vs Pi)
-- [ ] CircularSafeArea container widget
-- [ ] PieSliceButton widget with proper touch/click collision
-- [ ] CircularNoteLayout arranging 12 notes
-- [ ] MidiService interface with MockMidiService implementation
-- [ ] Connect touch/click events to MIDI output (console logging)
-- [ ] Center octave display and octave +/- controls
+- [x] Project setup (venv, dependencies, folder structure)
+- [x] Kivy app skeleton with 1080×1080 window
+- [x] Platform detection (macOS vs Pi)
+- [x] CircularSafeArea container widget
+- [x] PieSliceButton widget with proper touch/click collision
+- [x] CircularNoteLayout arranging 12 notes
+- [x] MidiService interface with MockMidiService implementation
+- [x] Connect touch/click events to MIDI output (console logging)
+- [x] Center octave display and octave +/- controls
+- [x] Touch sliding between notes (finger drag changes active note)
 
-#### Phase 1B: Hardware Deployment (Raspberry Pi 4)
-- [ ] PisoundMidiService implementation (real MIDI out)
-- [ ] Kivy touchscreen configuration for round display
-- [ ] Fullscreen mode and auto-start
-- [ ] Test with Pisound and external synth
+#### Phase 1B: Hardware Deployment (Raspberry Pi)
+- [x] Kivy touchscreen configuration for round display (mtdev provider)
+- [x] Fullscreen/borderless mode working
+- [x] Python 3.7 compatibility (older Pis)
+- [x] Setup documentation (docs/PI_SETUP.md)
+- [ ] RtmidiService implementation (real MIDI out via Pisound)
+- [ ] Auto-start service
+- [ ] Test with Pisound and external synth (requires Pi 4 with 40-pin GPIO)
 
 ### Milestone 2: Visual Feedback and Polish
 - [ ] Button press animations (color change, scale)
@@ -180,14 +186,16 @@ RoundSeq/
 │   │   └── note_play_screen.py
 │   ├── services/
 │   │   ├── __init__.py
-│   │   ├── midi_service.py      # Abstract interface
-│   │   ├── mock_midi_service.py # Console logging (dev)
-│   │   └── pisound_midi_service.py  # Real MIDI (prod)
+│   │   ├── midi_service.py      # Abstract interface + factory
+│   │   ├── mock_midi_service.py # Console logging (dev/fallback)
+│   │   └── rtmidi_service.py    # Real MIDI via rtmidi (prod)
 │   └── kv/
 │       ├── main.kv
 │       └── note_play_screen.kv
 ├── requirements.txt
-├── requirements-dev.txt    # Dev-only dependencies
+├── requirements-pi.txt     # Minimal deps for older Pis
+├── docs/
+│   └── PI_SETUP.md         # Raspberry Pi setup guide
 ├── config/
 │   └── kivy_config.ini     # Touchscreen input configuration (Pi)
 └── scripts/
@@ -198,12 +206,17 @@ RoundSeq/
 ## Dependencies
 
 ```
-# requirements.txt
+# requirements.txt (full)
 kivy>=2.2.0
-kivymd>=1.1.0
 mido>=1.3.0
 python-rtmidi>=1.5.0
+
+# requirements-pi.txt (for older Pis where rtmidi fails)
+kivy
+mido
 ```
+
+**Note**: On older Raspberry Pis (armv7l, Python 3.7), python-rtmidi may fail to build. Use requirements-pi.txt and the app will fall back to mock MIDI output.
 
 ## macOS Development Setup
 
@@ -257,16 +270,17 @@ Create `~/.kivy/config.ini`:
 ```ini
 [input]
 mouse = mouse
-hid_%(name)s = probesysfs,provider=hidinput
+touchscreen = mtdev,/dev/input/event0
 
 [graphics]
-fullscreen = auto
 width = 1080
 height = 1080
 ```
 
+**Note**: Use `mtdev` provider for the Waveshare display. The `hidinput` provider may not work correctly. Check `/proc/bus/input/devices` to find the correct event device.
+
 ### 5. Auto-start Application
-Configure systemd service to launch app on boot.
+Configure systemd service to launch app on boot. See `docs/PI_SETUP.md` for complete instructions.
 
 ## Deployment (Mac → Pi)
 

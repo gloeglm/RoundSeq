@@ -1,4 +1,5 @@
 """MIDI service interface and factory."""
+from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from typing import Optional
@@ -57,14 +58,23 @@ def get_midi_service(use_mock: Optional[bool] = None) -> MidiService:
 
     Args:
         use_mock: Force mock service if True, real service if False.
-                  If None, auto-detect based on platform.
+                  If None, auto-detect based on platform and available modules.
     """
-    if use_mock is None:
-        use_mock = not is_raspberry_pi()
-
-    if use_mock:
+    if use_mock is True:
         from .mock_midi_service import MockMidiService
         return MockMidiService()
-    else:
-        from .rtmidi_service import RtmidiService
-        return RtmidiService()
+
+    # Try to use real MIDI service
+    if use_mock is False or is_raspberry_pi():
+        try:
+            from .rtmidi_service import RtmidiService
+            # Test if rtmidi is actually available
+            import mido
+            mido.get_output_names()  # This will fail if rtmidi not installed
+            return RtmidiService()
+        except (ImportError, Exception) as e:
+            print(f"[MIDI] rtmidi not available, falling back to mock: {e}")
+
+    # Fall back to mock
+    from .mock_midi_service import MockMidiService
+    return MockMidiService()
