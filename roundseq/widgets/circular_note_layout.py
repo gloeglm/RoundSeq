@@ -9,6 +9,7 @@ from kivy.properties import (
 from kivy.clock import Clock
 
 from .pie_slice_button import PieSliceButton
+from ..geometry import normalize_angle
 from ..config import (
     NUM_NOTES,
     NOTE_NAMES,
@@ -61,8 +62,8 @@ class CircularNoteLayout(Widget):
             end_angle = center_angle + half_angle
 
             # Normalize to 0-360 range
-            start_angle = start_angle % 360
-            end_angle = end_angle % 360
+            start_angle = normalize_angle(start_angle)
+            end_angle = normalize_angle(end_angle)
 
             btn = PieSliceButton(
                 inner_radius=self.inner_radius,

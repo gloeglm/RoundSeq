@@ -1,7 +1,5 @@
 """Center display widget for octave control and status."""
 
-import math
-
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
 from kivy.uix.behaviors import ButtonBehavior
@@ -9,6 +7,7 @@ from kivy.properties import NumericProperty, ObjectProperty, StringProperty, Boo
 from kivy.graphics import Color, Ellipse, Line
 from kivy.clock import Clock
 
+from ..geometry import point_in_circle
 from ..config import (
     CENTER_RADIUS,
     COLORS,
@@ -57,9 +56,7 @@ class CircleButton(ButtonBehavior, Widget):
             )
 
     def collide_point(self, x, y):
-        dx = x - self.center_x
-        dy = y - self.center_y
-        return (dx * dx + dy * dy) <= (self.radius * self.radius)
+        return point_in_circle(x, y, self.center_x, self.center_y, self.radius)
 
     def on_press(self):
         self.is_pressed_state = True

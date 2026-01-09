@@ -1,8 +1,6 @@
 """Pie slice button widget for circular note layout."""
 from __future__ import annotations
 
-import math
-
 from kivy.uix.widget import Widget
 from kivy.properties import (
     NumericProperty,
@@ -10,10 +8,16 @@ from kivy.properties import (
     ListProperty,
     BooleanProperty,
 )
-from kivy.graphics import Color, Ellipse, Line, Triangle, Mesh
+from kivy.graphics import Color, Line, Mesh
 from kivy.graphics.instructions import InstructionGroup
 
 from ..config import COLORS
+from ..geometry import (
+    angle_span,
+    polar_to_cartesian,
+    point_in_arc,
+    arc_points,
+)
 
 
 class PieSliceButton(Widget):
@@ -95,66 +99,40 @@ class PieSliceButton(Widget):
         if len(outline_points) >= 4:
             self._gfx.add(Line(points=outline_points, width=1.2, close=True))
 
-    def _get_angle_span(self):
-        """Get the angular span, handling wrap-around."""
-        if self.end_angle >= self.start_angle:
-            return self.end_angle - self.start_angle
-        else:
-            # Wrap-around case (e.g., 345 to 15 = 30 degrees through 0)
-            return (360 - self.start_angle) + self.end_angle
-
     def _generate_slice_mesh(self) -> tuple[list, list]:
         """Generate mesh vertices for the pie slice."""
         cx = self.center_x
         cy = self.center_y
 
-        # Calculate angle span handling wrap-around
-        angle_span = self._get_angle_span()
-        segments = max(8, int(angle_span / 5))
+        span = angle_span(self.start_angle, self.end_angle)
+        segments = max(8, int(span / 5))
+
+        # Generate arc points using geometry module
+        inner_pts = arc_points(cx, cy, self.inner_radius,
+                               self.start_angle, self.end_angle, segments)
+        outer_pts = arc_points(cx, cy, self.outer_radius,
+                               self.start_angle, self.end_angle, segments)
+
+        # Build triangle fan from center of slice
+        mid_angle = self.start_angle + span / 2
+        mid_radius = (self.inner_radius + self.outer_radius) / 2
+        fan_cx, fan_cy = polar_to_cartesian(cx, cy, mid_radius, mid_angle)
 
         vertices = []
         indices = []
-
-        # Generate points along inner and outer arcs
-        inner_points = []
-        outer_points = []
-
-        for i in range(segments + 1):
-            t = i / segments
-            # Interpolate angle, handling wrap-around
-            angle_deg = self.start_angle + t * angle_span
-            angle = math.radians(angle_deg)
-
-            # Inner arc point
-            ix = cx + self.inner_radius * math.cos(angle)
-            iy = cy + self.inner_radius * math.sin(angle)
-            inner_points.append((ix, iy))
-
-            # Outer arc point
-            ox = cx + self.outer_radius * math.cos(angle)
-            oy = cy + self.outer_radius * math.sin(angle)
-            outer_points.append((ox, oy))
-
-        # Build triangle fan from center of slice
-        # Calculate center point of the slice for the fan
-        mid_angle_deg = self.start_angle + angle_span / 2
-        mid_angle = math.radians(mid_angle_deg)
-        mid_radius = (self.inner_radius + self.outer_radius) / 2
-        fan_cx = cx + mid_radius * math.cos(mid_angle)
-        fan_cy = cy + mid_radius * math.sin(mid_angle)
 
         # Add center vertex (texture coords 0, 0)
         vertices.extend([fan_cx, fan_cy, 0, 0])
         idx = 0
 
         # Add outer arc vertices
-        for ox, oy in outer_points:
+        for ox, oy in outer_pts:
             vertices.extend([ox, oy, 0, 0])
             idx += 1
             indices.append(idx)
 
         # Add inner arc vertices (in reverse for proper winding)
-        for ix, iy in reversed(inner_points):
+        for ix, iy in reversed(inner_pts):
             vertices.extend([ix, iy, 0, 0])
             idx += 1
             indices.append(idx)
@@ -171,52 +149,30 @@ class PieSliceButton(Widget):
         """Generate points for the outline."""
         cx = self.center_x
         cy = self.center_y
+
+        span = angle_span(self.start_angle, self.end_angle)
+        segments = max(8, int(span / 5))
+
+        # Get arc points
+        outer_pts = arc_points(cx, cy, self.outer_radius,
+                               self.start_angle, self.end_angle, segments)
+        inner_pts = arc_points(cx, cy, self.inner_radius,
+                               self.start_angle, self.end_angle, segments)
+
+        # Flatten to list: outer arc forward, inner arc backward
         points = []
-
-        angle_span = self._get_angle_span()
-        segments = max(8, int(angle_span / 5))
-
-        # Outer arc (start to end)
-        for i in range(segments + 1):
-            t = i / segments
-            angle_deg = self.start_angle + t * angle_span
-            angle = math.radians(angle_deg)
-            x = cx + self.outer_radius * math.cos(angle)
-            y = cy + self.outer_radius * math.sin(angle)
+        for x, y in outer_pts:
             points.extend([x, y])
-
-        # Inner arc (end to start)
-        for i in range(segments + 1):
-            t = i / segments
-            angle_deg = self.start_angle + angle_span - t * angle_span
-            angle = math.radians(angle_deg)
-            x = cx + self.inner_radius * math.cos(angle)
-            y = cy + self.inner_radius * math.sin(angle)
+        for x, y in reversed(inner_pts):
             points.extend([x, y])
 
         return points
 
     def collide_point(self, x, y):
         """Check if point is within the pie slice."""
-        dx = x - self.center_x
-        dy = y - self.center_y
-        distance = math.sqrt(dx * dx + dy * dy)
-
-        # Check radius bounds
-        if not (self.inner_radius <= distance <= self.outer_radius):
-            return False
-
-        # Check angle bounds
-        angle = math.degrees(math.atan2(dy, dx))
-        # Normalize angle to 0-360
-        if angle < 0:
-            angle += 360
-
-        start = self.start_angle % 360
-        end = self.end_angle % 360
-
-        # Handle wrap-around case
-        if start <= end:
-            return start <= angle <= end
-        else:
-            return angle >= start or angle <= end
+        return point_in_arc(
+            x, y,
+            self.center_x, self.center_y,
+            self.inner_radius, self.outer_radius,
+            self.start_angle, self.end_angle
+        )
