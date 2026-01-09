@@ -165,6 +165,11 @@ Safe area calculations:
 - [ ] Settings screen (MIDI channel, velocity, scale modes)
 - [ ] MIDI clock sync (send/receive)
 
+### Future: Testing & Infrastructure
+- [ ] Automated UI testing with pytest-kivy (simulate touches, verify all notes work)
+- [ ] CI/CD pipeline (GitHub Actions)
+- [ ] Disable debug colors for production
+
 ## Project Structure
 
 ```
@@ -175,6 +180,7 @@ RoundSeq/
 │   ├── app.py              # Main Kivy App class
 │   ├── platform.py         # Platform detection (macOS vs Pi)
 │   ├── config.py           # Display and app configuration
+│   ├── geometry.py         # Radial math utilities
 │   ├── widgets/
 │   │   ├── __init__.py
 │   │   ├── circular_safe_area.py
@@ -192,6 +198,8 @@ RoundSeq/
 │   └── kv/
 │       ├── main.kv
 │       └── note_play_screen.kv
+├── tests/
+│   └── test_geometry.py    # Geometry module unit tests
 ├── requirements.txt
 ├── requirements-pi.txt     # Minimal deps for older Pis
 ├── docs/
