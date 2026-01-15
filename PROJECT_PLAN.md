@@ -139,11 +139,11 @@ Safe area calculations:
 #### Phase 1B: Hardware Deployment (Raspberry Pi)
 - [x] Kivy touchscreen configuration for round display (mtdev provider)
 - [x] Fullscreen/borderless mode working
-- [x] Python 3.7 compatibility (older Pis)
+- [x] Python 3.13 on Pi 4 64-bit (Python 3.7 on older Pis)
 - [x] Setup documentation (docs/PI_SETUP.md)
-- [ ] RtmidiService implementation (real MIDI out via Pisound)
-- [ ] Auto-start service
-- [ ] Test with Pisound and external synth (requires Pi 4 with 40-pin GPIO)
+- [x] RtmidiService implementation (real MIDI out)
+- [x] Auto-start systemd service
+- [ ] Test with Pisound and external synth (requires Pisound HAT)
 
 ### Milestone 2: Visual Feedback and Polish
 - [ ] Button press animations (color change, scale)
@@ -201,7 +201,6 @@ RoundSeq/
 ├── tests/
 │   └── test_geometry.py    # Geometry module unit tests
 ├── requirements.txt
-├── requirements-pi.txt     # Minimal deps for older Pis
 ├── docs/
 │   └── PI_SETUP.md         # Raspberry Pi setup guide
 ├── config/
@@ -214,17 +213,13 @@ RoundSeq/
 ## Dependencies
 
 ```
-# requirements.txt (full)
+# requirements.txt
 kivy>=2.2.0
 mido>=1.3.0
 python-rtmidi>=1.5.0
-
-# requirements-pi.txt (for older Pis where rtmidi fails)
-kivy
-mido
 ```
 
-**Note**: On older Raspberry Pis (armv7l, Python 3.7), python-rtmidi may fail to build. Use requirements-pi.txt and the app will fall back to mock MIDI output.
+**Note**: On Pi 4 with 64-bit OS, all dependencies install successfully. On older Pis (armv7l, 32-bit), python-rtmidi may fail to build - the app will fall back to mock MIDI output.
 
 ## macOS Development Setup
 
@@ -256,36 +251,35 @@ macOS has a built-in IAC Driver for software MIDI routing:
 
 ## Raspberry Pi Setup
 
-### 1. OS Installation
-- Use Raspberry Pi OS Lite (64-bit recommended)
-- No desktop environment needed
+See `docs/PI_SETUP.md` for complete setup instructions. Quick summary:
 
-### 2. System Dependencies
-```bash
-sudo apt update
-sudo apt install -y python3-pip python3-venv
-sudo apt install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
-sudo apt install -y libmtdev-dev  # Touch input
+### 1. OS Installation
+- Use **Raspberry Pi OS Lite (64-bit)** for Pi 4
+- Use Raspberry Pi Imager to pre-configure SSH, username, WiFi
+
+### 2. Display Configuration
+Add to `/boot/firmware/config.txt` for the 1080x1080 round display:
+```ini
+hdmi_force_hotplug=1
+hdmi_group=2
+hdmi_mode=87
+hdmi_cvt=1080 1080 60 1 0 0 0
+hdmi_drive=2
+config_hdmi_boost=4
 ```
 
-### 3. Pisound Driver
+### 3. System Dependencies
 ```bash
-curl https://blokas.io/pisound/install.sh | sh
+sudo apt update
+sudo apt install -y python3-pip python3-venv git
+sudo apt install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev
+sudo apt install -y libmtdev-dev
 ```
 
 ### 4. Kivy Touchscreen Configuration
-Create `~/.kivy/config.ini`:
-```ini
-[input]
-mouse = mouse
-touchscreen = mtdev,/dev/input/event0
+On Pi 4 with 64-bit OS, Kivy auto-detects the touchscreen via `probesysfs` - no manual config needed.
 
-[graphics]
-width = 1080
-height = 1080
-```
-
-**Note**: Use `mtdev` provider for the Waveshare display. The `hidinput` provider may not work correctly. Check `/proc/bus/input/devices` to find the correct event device.
+For older systems, see troubleshooting in `docs/PI_SETUP.md`.
 
 ### 5. Auto-start Application
 Configure systemd service to launch app on boot. See `docs/PI_SETUP.md` for complete instructions.

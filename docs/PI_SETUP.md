@@ -4,55 +4,69 @@ This guide documents how to set up a Raspberry Pi to run RoundSeq with the Waves
 
 ## Hardware
 
-- Raspberry Pi (tested on Pi with armv7l, recommended: Pi 4)
+- Raspberry Pi 4 (recommended, 2GB+ RAM)
 - Waveshare 5" 1080x1080 Round LCD
-- HDMI cable (HDMI to Micro-HDMI for Pi 4)
+- Micro-HDMI to HDMI cable (Pi 4 uses micro-HDMI, not full-size)
 - USB cable for touch input
-- Optional: Blokas Pisound for MIDI output
+- MicroSD card (16GB+ recommended)
+- Optional: Blokas Pisound for hardware MIDI output
 
 ## Initial Pi Setup
 
 ### 1. Flash Raspberry Pi OS
 
-Use Raspberry Pi Imager to flash **Raspberry Pi OS (Legacy, 32-bit)** to an SD card.
+Use [Raspberry Pi Imager](https://www.raspberrypi.com/software/) to flash **Raspberry Pi OS Lite (64-bit)** to an SD card.
 
-### 2. Enable SSH
+Click the gear icon (⚙️) to pre-configure:
+- **Hostname**: e.g., `raspi`
+- **Enable SSH**: Use public-key authentication (paste your public key)
+- **Username/password**: Set your username (e.g., `raspberry`)
+- **WiFi**: Optional, or use ethernet for initial setup
 
-Before first boot, create an empty file called `ssh` on the boot partition:
-
+To generate an SSH key on macOS/Linux:
 ```bash
-touch /Volumes/boot/ssh  # macOS
-# or
-touch /boot/ssh  # Linux
+ssh-keygen -t ed25519 -f ~/.ssh/roundseq_pi -C "roundseq-pi"
+cat ~/.ssh/roundseq_pi.pub  # Copy this to Pi Imager
 ```
 
-### 3. Connect Hardware
+### 2. Connect Hardware
 
 1. Insert SD card into Pi
-2. Connect Waveshare display via HDMI
-3. Connect Waveshare touch via USB
-4. Connect Ethernet cable
+2. Connect Waveshare display via micro-HDMI (use HDMI0 port, closest to USB-C)
+3. Connect Waveshare touch USB cable
+4. Connect ethernet or ensure WiFi is configured
 5. Power on the Pi
 
-### 4. SSH into the Pi
+### 3. SSH into the Pi
 
 ```bash
-ssh pi@raspberrypi.local
-# Default password: raspberry
+ssh -i ~/.ssh/roundseq_pi <username>@<hostname>.local
 ```
+
+Or add to `~/.ssh/config` for easier access:
+```
+Host raspi
+    HostName raspi.local
+    User raspberry
+    IdentityFile ~/.ssh/roundseq_pi
+```
+
+Then simply: `ssh raspi`
 
 ## Display Configuration
 
-### 1. Edit /boot/config.txt
+The HDMI must be configured for the 1080x1080 resolution to avoid display distortion during boot.
+
+Edit `/boot/firmware/config.txt`:
 
 ```bash
-sudo nano /boot/config.txt
+sudo nano /boot/firmware/config.txt
 ```
 
-Add these lines at the end for the 1080x1080 display:
+Add these lines at the end:
 
 ```ini
-# Waveshare 5" Round Display
+# Waveshare 5" Round Display (1080x1080)
 hdmi_force_hotplug=1
 hdmi_group=2
 hdmi_mode=87
@@ -69,29 +83,7 @@ sudo reboot
 
 ## Software Installation
 
-### 1. Fix Package Sources (for older Buster images)
-
-If you get 404 errors with `apt update`, edit the sources:
-
-```bash
-sudo nano /etc/apt/sources.list
-```
-
-Replace contents with:
-
-```
-deb http://archive.raspbian.org/raspbian/ buster main contrib non-free rpi
-```
-
-Comment out raspi.list:
-
-```bash
-sudo nano /etc/apt/sources.list.d/raspi.list
-```
-
-Add `#` at the start of each line.
-
-### 2. Install Dependencies
+### 1. Install System Dependencies
 
 ```bash
 sudo apt update
@@ -100,57 +92,43 @@ sudo apt install -y libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-
 sudo apt install -y libmtdev-dev
 ```
 
-### 3. Clone and Setup RoundSeq
+### 2. Deploy RoundSeq
+
+From your development machine, use rsync:
 
 ```bash
-git clone https://github.com/gloeglm/RoundSeq.git
-cd RoundSeq
+rsync -avz --exclude 'venv' --exclude '__pycache__' --exclude '.git' \
+  ./ <username>@<hostname>.local:~/RoundSeq/
+```
+
+Or clone from git on the Pi:
+
+```bash
+git clone <repository-url> ~/RoundSeq
+```
+
+### 3. Create Virtual Environment and Install Packages
+
+```bash
+cd ~/RoundSeq
 python3 -m venv venv
 source venv/bin/activate
-pip install kivy mido
+pip install --upgrade pip
+pip install kivy mido python-rtmidi
 ```
 
-Note: `python-rtmidi` may fail to install on older systems. The app will fall back to mock MIDI output.
-
-For real MIDI output (with Pisound), also install:
-
-```bash
-sudo apt install -y libasound2-dev libjack-dev python3-dev
-pip install python-rtmidi
-```
+Note: On Pi 4 with 64-bit OS, `python-rtmidi` installs successfully. On older Pis (armv7l, 32-bit), it may fail to build - the app will fall back to mock MIDI output.
 
 ## Touch Input Configuration
 
-### 1. Configure Kivy Input
+Kivy automatically detects the Waveshare touchscreen via `probesysfs` - no manual configuration needed on Pi 4 with 64-bit OS.
 
-Edit or create `~/.kivy/config.ini`:
+### Input Permissions
 
-```bash
-nano ~/.kivy/config.ini
-```
-
-Ensure the `[input]` section contains:
-
-```ini
-[input]
-mouse = mouse
-touchscreen = mtdev,/dev/input/event0
-```
-
-Also set the display size in `[graphics]`:
-
-```ini
-[graphics]
-width = 1080
-height = 1080
-```
-
-### 2. Input Permissions
-
-Add the pi user to the input group:
+Add your user to the input group:
 
 ```bash
-sudo usermod -a -G input pi
+sudo usermod -a -G input $USER
 ```
 
 Logout and login again for changes to take effect.
@@ -163,37 +141,7 @@ source venv/bin/activate
 python main.py
 ```
 
-## Troubleshooting
-
-### No display output
-- Check HDMI connection
-- Verify config.txt settings
-- Try `hdmi_safe=1` temporarily
-
-### Display flickering/artifacts
-- Use separate USB power for the display
-- Increase `config_hdmi_boost` value (max 11)
-
-### Touch not working
-1. Check if Linux sees the device:
-   ```bash
-   cat /proc/bus/input/devices
-   ```
-
-2. Test raw touch events:
-   ```bash
-   sudo evtest /dev/input/event0
-   ```
-
-3. Verify Kivy config uses `mtdev` provider
-
-### Python type errors
-Ensure you're using the virtual environment:
-```bash
-source venv/bin/activate
-```
-
-## Auto-start on Boot (Optional)
+## Auto-start on Boot
 
 Create a systemd service:
 
@@ -208,18 +156,75 @@ After=multi-user.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/RoundSeq
-ExecStart=/home/pi/RoundSeq/venv/bin/python /home/pi/RoundSeq/main.py
+User=<your-username>
+WorkingDirectory=/home/<your-username>/RoundSeq
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/home/<your-username>/RoundSeq/venv/bin/python /home/<your-username>/RoundSeq/main.py
 Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 ```
 
+Replace `<your-username>` with your actual username. The `PYTHONUNBUFFERED=1` ensures log output appears immediately in journalctl.
+
 Enable and start:
 
 ```bash
+sudo systemctl daemon-reload
 sudo systemctl enable roundseq
 sudo systemctl start roundseq
+```
+
+Useful commands:
+```bash
+sudo systemctl status roundseq    # Check status
+sudo systemctl stop roundseq      # Stop
+sudo systemctl restart roundseq   # Restart
+journalctl -u roundseq -f         # View logs
+```
+
+## Troubleshooting
+
+### Display distortion during boot
+Ensure the HDMI config is set in `/boot/firmware/config.txt` (see Display Configuration above).
+
+### No display output
+- Check micro-HDMI connection (use HDMI0 port)
+- Verify config.txt settings
+- Try `hdmi_safe=1` temporarily
+
+### Touch not working
+
+1. Check if Linux sees the device:
+   ```bash
+   cat /proc/bus/input/devices
+   ```
+   Look for "Waveshare" and note the event number.
+
+2. Test raw touch events:
+   ```bash
+   sudo apt install evtest
+   sudo evtest /dev/input/event0
+   ```
+
+3. Check user is in input group:
+   ```bash
+   groups
+   ```
+
+4. If auto-detection fails (older systems), manually configure `~/.kivy/config.ini`:
+   ```ini
+   [input]
+   mouse = mouse
+   touchscreen = mtdev,/dev/input/event0
+   ```
+   Remove any `%(name)s = probesysfs` line to avoid duplicate events.
+
+### App crashes or won't start
+Check logs:
+```bash
+journalctl -u roundseq -n 50
+# or
+cat ~/.kivy/logs/kivy_*.txt
 ```

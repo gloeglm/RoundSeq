@@ -54,6 +54,8 @@ class RtmidiService(MidiService):
             return
         msg = mido.Message("note_on", note=note, velocity=velocity, channel=self.channel)
         self._port.send(msg)
+        name = self.note_name(note)
+        print(f"[MIDI] Note ON:  {name} (note={note}, vel={velocity})")
 
     def note_off(self, note: int) -> None:
         """Send a note off message."""
@@ -61,6 +63,8 @@ class RtmidiService(MidiService):
             return
         msg = mido.Message("note_off", note=note, velocity=0, channel=self.channel)
         self._port.send(msg)
+        name = self.note_name(note)
+        print(f"[MIDI] Note OFF: {name} (note={note})")
 
     def list_ports(self) -> list[str]:
         """List available MIDI output ports."""
