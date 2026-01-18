@@ -15,9 +15,15 @@ python main.py
 # Run tests
 python -m pytest tests/
 
-# Deploy to Pi
+# Deploy to Pi (SSH profile: raspi)
 rsync -avz --exclude 'venv' --exclude '__pycache__' --exclude '.git' \
-  ./ pi@raspberrypi.local:~/RoundSeq/
+  ./ raspi:~/RoundSeq/
+
+# Restart app on Pi
+ssh raspi "sudo systemctl restart roundseq"
+
+# View Pi logs
+ssh raspi "sudo journalctl -u roundseq -n 50 --no-pager"
 ```
 
 ## Architecture

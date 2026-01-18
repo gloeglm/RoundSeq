@@ -20,18 +20,26 @@ class RtmidiService(MidiService):
         """Connect to a MIDI output port.
 
         Args:
-            port_name: Name of port to connect to. If None, uses first available.
+            port_name: Name of port to connect to. If None, auto-selects
+                       preferring hardware ports (pisound) over virtual ones.
         """
         try:
             if port_name:
                 self._port = mido.open_output(port_name)
             else:
                 ports = self.list_ports()
-                if ports:
-                    self._port = mido.open_output(ports[0])
-                else:
+                if not ports:
                     print("[MIDI] No output ports available")
                     return False
+
+                # Prefer pisound or other hardware ports over "Midi Through"
+                selected = ports[0]
+                for port in ports:
+                    if "pisound" in port.lower():
+                        selected = port
+                        break
+                print(f"[MIDI] Available ports: {ports}")
+                self._port = mido.open_output(selected)
 
             self._connected = True
             print(f"[MIDI] Connected to: {self._port.name}")
