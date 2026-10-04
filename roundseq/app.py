@@ -5,7 +5,8 @@ from kivy.core.window import Window
 from kivy.config import Config
 
 from .screens.note_play_screen import NotePlayScreen
-from .services import get_midi_service
+from .screens.clock_viz_screen import ClockVizScreen
+from .services import get_midi_service, get_midi_input_service
 from .platform import get_platform_name, is_raspberry_pi
 from .config import DISPLAY_WIDTH, DISPLAY_HEIGHT, COLORS
 
@@ -13,35 +14,36 @@ from .config import DISPLAY_WIDTH, DISPLAY_HEIGHT, COLORS
 class RoundSeqApp(App):
     """Main application class for RoundSeq."""
 
-    def __init__(self, **kwargs):
+    def __init__(self, mode: str = "play", **kwargs):
         super().__init__(**kwargs)
+        self._mode = mode
         self._midi_service = None
-        self._note_screen = None
+        self._midi_input_service = None
+        self._screen = None
 
     def build(self):
         """Build the application UI."""
-        # Configure window
         self._configure_window()
+        print(f"[RoundSeq] Running on {get_platform_name()} (mode={self._mode})")
 
-        # Initialize MIDI service
-        self._midi_service = get_midi_service()
-        self._midi_service.connect()
+        if self._mode == "clock":
+            self._midi_input_service = get_midi_input_service()
+            self._midi_input_service.connect()
+            print(f"[RoundSeq] MIDI input ports: {self._midi_input_service.list_ports()}")
+            self._screen = ClockVizScreen(midi_input_service=self._midi_input_service)
+        else:
+            self._midi_service = get_midi_service()
+            self._midi_service.connect()
+            print(f"[RoundSeq] MIDI ports: {self._midi_service.list_ports()}")
+            self._screen = NotePlayScreen(midi_service=self._midi_service)
 
-        print(f"[RoundSeq] Running on {get_platform_name()}")
-        print(f"[RoundSeq] MIDI ports: {self._midi_service.list_ports()}")
-
-        # Create main screen
-        self._note_screen = NotePlayScreen(midi_service=self._midi_service)
-
-        return self._note_screen
+        return self._screen
 
     def _configure_window(self):
         """Configure the window based on platform."""
-        # Set background color
         Window.clearcolor = COLORS["background"]
 
         if not is_raspberry_pi():
-            # Windowed on desktop
             Window.fullscreen = False
             Window.size = (DISPLAY_WIDTH, DISPLAY_HEIGHT)
             Window.left = 100
@@ -49,25 +51,26 @@ class RoundSeqApp(App):
 
     def on_stop(self):
         """Clean up when app closes."""
+        if self._screen is not None and hasattr(self._screen, "stop"):
+            self._screen.stop()
         if self._midi_service:
             self._midi_service.disconnect()
+        if self._midi_input_service:
+            self._midi_input_service.disconnect()
         print("[RoundSeq] Goodbye!")
 
 
-def run():
+def run(mode: str = "play"):
     """Run the application."""
-    # Pre-configure Kivy before importing other modules
     Config.set("graphics", "width", str(DISPLAY_WIDTH))
     Config.set("graphics", "height", str(DISPLAY_HEIGHT))
     Config.set("graphics", "resizable", "0")
 
-    # Disable multitouch emulation (red dots on right-click)
     Config.set("input", "mouse", "mouse,multitouch_on_demand")
 
-    # On Raspberry Pi, use simpler fullscreen mode
     if is_raspberry_pi():
-        Config.set("graphics", "fullscreen", "0")  # Start windowed, then go fullscreen
+        Config.set("graphics", "fullscreen", "0")
         Config.set("graphics", "borderless", "1")
 
-    app = RoundSeqApp()
+    app = RoundSeqApp(mode=mode)
     app.run()
