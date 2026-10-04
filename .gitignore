@@ -8,3 +8,4 @@ dist/
 build/
 .kivy/
 *.log
+.claude/
