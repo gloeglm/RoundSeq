@@ -15,6 +15,8 @@ from ..config import (
     CENTER_RADIUS,
     COLORS,
     DEFAULT_OCTAVE,
+    DEFAULT_SCALE,
+    DEFAULT_ROOT,
 )
 
 
@@ -39,6 +41,8 @@ class NotePlayScreen(FloatLayout):
             inner_radius=INNER_RADIUS,
             outer_radius=OUTER_RADIUS,
             octave=DEFAULT_OCTAVE,
+            scale_key=DEFAULT_SCALE,
+            root_note=DEFAULT_ROOT,
             size_hint=(1, 1),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
@@ -50,10 +54,13 @@ class NotePlayScreen(FloatLayout):
         self._center_display = CenterDisplay(
             radius=CENTER_RADIUS,
             octave=DEFAULT_OCTAVE,
+            scale_key=DEFAULT_SCALE,
+            root_note=DEFAULT_ROOT,
             size_hint=(1, 1),
             pos_hint={"center_x": 0.5, "center_y": 0.5},
         )
         self._center_display.on_octave_change = self._on_octave_change
+        self._center_display.on_scale_change = self._on_scale_change
         self.add_widget(self._center_display)
 
     def _update_bg(self, *args):
@@ -63,8 +70,9 @@ class NotePlayScreen(FloatLayout):
 
     def _on_note_on(self, midi_note: int, note_name: str):
         """Handle note on event."""
-        # Update center display
-        full_name = f"{note_name}{self._note_layout.octave}"
+        # Update center display with actual octave from MIDI note
+        actual_octave = (midi_note // 12) - 1
+        full_name = f"{note_name}{actual_octave}"
         self._center_display.show_note(full_name)
 
         # Send MIDI
@@ -83,6 +91,10 @@ class NotePlayScreen(FloatLayout):
     def _on_octave_change(self, octave: int):
         """Handle octave change from center display."""
         self._note_layout.set_octave(octave)
+
+    def _on_scale_change(self, scale_key: str, root_note: int):
+        """Handle scale change from center display."""
+        self._note_layout.set_scale(scale_key, root_note)
 
     def set_midi_service(self, midi_service: MidiService):
         """Set the MIDI service."""

@@ -5,6 +5,7 @@ from kivy.properties import (
     NumericProperty,
     ObjectProperty,
     ListProperty,
+    StringProperty,
 )
 from kivy.clock import Clock
 
@@ -18,15 +19,20 @@ from ..config import (
     CENTER_X,
     CENTER_Y,
     DEFAULT_OCTAVE,
+    SCALES,
+    DEFAULT_SCALE,
+    DEFAULT_ROOT,
 )
 
 
 class CircularNoteLayout(Widget):
-    """Arranges 12 note buttons in a circular pattern."""
+    """Arranges note buttons in a circular pattern based on selected scale."""
 
     inner_radius = NumericProperty(INNER_RADIUS)
     outer_radius = NumericProperty(OUTER_RADIUS)
     octave = NumericProperty(DEFAULT_OCTAVE)
+    scale_key = StringProperty(DEFAULT_SCALE)
+    root_note = NumericProperty(DEFAULT_ROOT)
 
     # Callback when a note is pressed/released
     on_note_on = ObjectProperty(None)
@@ -41,29 +47,56 @@ class CircularNoteLayout(Widget):
         Clock.schedule_once(self._create_note_buttons, 0)
 
     def _create_note_buttons(self, dt=None):
-        """Create the 12 note buttons arranged in a circle."""
+        """Create 12 note buttons arranged in a circle based on current scale.
+
+        Layout:
+        - Position 0 (top): middle note of scale for current octave
+        - Positions 1-5 (clockwise): ascending notes into higher octave
+        - Positions 6-11 (left side): descending notes into lower octave
+        - Discontinuity at bottom (position 5-6 boundary)
+        """
         self.clear_widgets()
         self._note_buttons = []
 
-        # Each note gets 30 degrees (360 / 12)
+        # Get scale intervals
+        _, intervals = SCALES[self.scale_key]
+        scale_len = len(intervals)
+
+        # Middle note of scale (e.g., index 3 for 7-note scale = 4th note)
+        middle_index = (scale_len - 1) // 2
+
+        # Always 12 buttons
         angle_per_note = 360 / NUM_NOTES
 
-        for i in range(NUM_NOTES):
-            note_name = NOTE_NAMES[i]
+        for position in range(NUM_NOTES):
+            # Calculate scale degree relative to middle
+            # Positions 0-5: ascending (0 to +5)
+            # Positions 6-11: descending (-6 to -1)
+            if position <= 5:
+                degree_offset = position
+            else:
+                degree_offset = position - 12
+
+            # Absolute scale degree (middle_index + offset)
+            scale_degree = middle_index + degree_offset
+
+            # Convert scale degree to chromatic note and octave offset
+            # Use Python's modulo for correct negative handling
+            octave_offset = scale_degree // scale_len
+            scale_index = scale_degree % scale_len
+            chromatic_offset = intervals[scale_index]
+            chromatic_note = (self.root_note + chromatic_offset) % 12
+            note_name = NOTE_NAMES[chromatic_note]
             is_sharp = "#" in note_name
 
-            # Calculate center angle for this note
-            # C is at top (90 degrees), going clockwise (decreasing angles)
-            center_angle = 90 - (i * angle_per_note)
+            # Calculate center angle for this position
+            # Position 0 at top (90 degrees), going clockwise (decreasing angles)
+            center_angle = 90 - (position * angle_per_note)
 
             # Slice spans half the angle on each side
             half_angle = angle_per_note / 2
-            start_angle = center_angle - half_angle
-            end_angle = center_angle + half_angle
-
-            # Normalize to 0-360 range
-            start_angle = normalize_angle(start_angle)
-            end_angle = normalize_angle(end_angle)
+            start_angle = normalize_angle(center_angle - half_angle)
+            end_angle = normalize_angle(center_angle + half_angle)
 
             btn = PieSliceButton(
                 inner_radius=self.inner_radius,
@@ -76,11 +109,12 @@ class CircularNoteLayout(Widget):
                 pos=self.pos,
             )
 
-            # Store note index for MIDI calculation
-            btn.note_index = i
-
-            # Don't use ButtonBehavior events - we handle touch ourselves
-            # for proper slide-between-notes behavior
+            # Store data for MIDI calculation
+            btn.note_index = position
+            btn.chromatic_note = chromatic_note
+            btn.scale_degree = scale_degree
+            btn.octave_offset = octave_offset
+            btn.is_middle = (position == 0)  # Top button is the middle note
 
             self._note_buttons.append(btn)
             self.add_widget(btn)
@@ -121,7 +155,7 @@ class CircularNoteLayout(Widget):
         button.is_pressed_state = True
         self._active_buttons[touch_uid] = button
         if self.on_note_on:
-            midi_note = self._get_midi_note(button.note_index)
+            midi_note = self._get_midi_note(button)
             self.on_note_on(midi_note, button.label_text)
 
     def _deactivate_button(self, button, touch_uid):
@@ -130,7 +164,7 @@ class CircularNoteLayout(Widget):
         if touch_uid in self._active_buttons:
             del self._active_buttons[touch_uid]
         if self.on_note_off:
-            midi_note = self._get_midi_note(button.note_index)
+            midi_note = self._get_midi_note(button)
             self.on_note_off(midi_note, button.label_text)
 
     def on_touch_down(self, touch):
@@ -173,13 +207,30 @@ class CircularNoteLayout(Widget):
 
         return True
 
-    def _get_midi_note(self, note_index: int) -> int:
-        """Convert note index and octave to MIDI note number.
+    def _get_midi_note(self, button) -> int:
+        """Convert button's note info to MIDI note number.
 
         MIDI note 60 = C4 (middle C)
+        Uses the button's chromatic_note and octave_offset.
         """
-        return (self.octave + 1) * 12 + note_index
+        actual_octave = self.octave + button.octave_offset
+        return (actual_octave + 1) * 12 + button.chromatic_note
 
     def set_octave(self, octave: int):
         """Set the current octave."""
         self.octave = max(0, min(8, octave))
+
+    def set_scale(self, scale_key: str, root_note: int):
+        """Set the scale and root note, rebuilding buttons.
+
+        Args:
+            scale_key: Key into SCALES dict (e.g., 'major', 'minor')
+            root_note: Chromatic root note (0=C, 1=C#, ..., 11=B)
+        """
+        # Deactivate any currently active notes to prevent stuck MIDI
+        for touch_uid, button in list(self._active_buttons.items()):
+            self._deactivate_button(button, touch_uid)
+
+        self.scale_key = scale_key
+        self.root_note = root_note
+        self._create_note_buttons()

@@ -39,6 +39,10 @@ class PieSliceButton(Widget):
     is_sharp = BooleanProperty(False)
     is_pressed_state = BooleanProperty(False)
     note_index = NumericProperty(0)  # For debug coloring
+    chromatic_note = NumericProperty(0)  # Chromatic note value (0-11) for MIDI
+    scale_degree = NumericProperty(0)  # Scale degree relative to middle (can be negative)
+    octave_offset = NumericProperty(0)  # Octave offset from base octave (-1, 0, +1, etc.)
+    is_middle = BooleanProperty(False)  # True if this is the middle note (highlighted)
 
     background_color = ListProperty(COLORS["button_normal"])
     pressed_color = ListProperty(COLORS["button_pressed"])
@@ -60,6 +64,7 @@ class PieSliceButton(Widget):
             end_angle=self._update_graphics,
             is_pressed_state=self._update_graphics,
             is_sharp=self._update_graphics,
+            is_middle=self._update_graphics,
         )
         self._update_graphics()
 
@@ -77,6 +82,8 @@ class PieSliceButton(Widget):
         # Determine color based on state
         if self.is_pressed_state:
             color = self.pressed_color
+        elif self.is_middle:
+            color = COLORS["accent"]  # Highlight for middle note
         elif self.DEBUG_COLORS:
             color = self._get_debug_color()
         elif self.is_sharp:

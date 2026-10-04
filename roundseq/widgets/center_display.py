@@ -2,100 +2,58 @@
 
 from kivy.uix.widget import Widget
 from kivy.uix.label import Label
-from kivy.uix.behaviors import ButtonBehavior
-from kivy.properties import NumericProperty, ObjectProperty, StringProperty, BooleanProperty
-from kivy.graphics import Color, Ellipse, Line
+from kivy.uix.button import Button
+from kivy.uix.boxlayout import BoxLayout
+from kivy.properties import NumericProperty, ObjectProperty, StringProperty
+from kivy.graphics import Color, Ellipse
 from kivy.clock import Clock
 
-from ..geometry import point_in_circle
 from ..config import (
     CENTER_RADIUS,
     COLORS,
     DEFAULT_OCTAVE,
     MIN_OCTAVE,
     MAX_OCTAVE,
+    SCALES,
+    SCALE_ORDER,
+    DEFAULT_SCALE,
+    DEFAULT_ROOT,
+    NOTE_NAMES,
 )
 
 
-class CircleButton(ButtonBehavior, Widget):
-    """A simple circular button."""
-
-    radius = NumericProperty(30)
-    text = StringProperty("")
-    is_pressed_state = BooleanProperty(False)
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        self._label = None
-        self.bind(pos=self._update, size=self._update, is_pressed_state=self._update)
-        Clock.schedule_once(self._setup, 0)
-
-    def _setup(self, dt):
-        self._update()
-
-    def _update(self, *args):
-        self.canvas.before.clear()
-        with self.canvas.before:
-            if self.is_pressed_state:
-                Color(*COLORS["button_pressed"])
-            else:
-                Color(*COLORS["button_normal"])
-            Ellipse(
-                pos=(self.center_x - self.radius, self.center_y - self.radius),
-                size=(self.radius * 2, self.radius * 2),
-            )
-            Color(0.4, 0.4, 0.45, 1)
-            Line(
-                ellipse=(
-                    self.center_x - self.radius,
-                    self.center_y - self.radius,
-                    self.radius * 2,
-                    self.radius * 2,
-                ),
-                width=1.2,
-            )
-
-    def collide_point(self, x, y):
-        return point_in_circle(x, y, self.center_x, self.center_y, self.radius)
-
-    def on_press(self):
-        self.is_pressed_state = True
-
-    def on_release(self):
-        self.is_pressed_state = False
-
-
 class CenterDisplay(Widget):
-    """Central display showing octave and providing +/- controls."""
+    """Central display showing octave, scale selection, and controls."""
 
     radius = NumericProperty(CENTER_RADIUS)
     octave = NumericProperty(DEFAULT_OCTAVE)
     last_note = StringProperty("")
+    scale_key = StringProperty(DEFAULT_SCALE)
+    root_note = NumericProperty(DEFAULT_ROOT)
 
     # Callbacks
     on_octave_change = ObjectProperty(None)
+    on_scale_change = ObjectProperty(None)
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+        self._bg_ellipse = None
+        self._layout = None
+        self._root_label = None
+        self._scale_label = None
         self._octave_label = None
         self._note_label = None
-        self._btn_up = None
-        self._btn_down = None
-        self._btn_up_label = None
-        self._btn_down_label = None
-        self._bg_ellipse = None
         self._setup_done = False
 
         Clock.schedule_once(self._setup, 0)
-        self.bind(pos=self._update_positions, size=self._update_positions)
+        self.bind(pos=self._update_layout, size=self._update_layout)
 
     def _setup(self, dt):
         """Set up child widgets."""
         self._draw_background()
-        self._create_labels()
-        self._create_buttons()
+        self._create_layout()
         self._setup_done = True
-        self._update_positions()
+        self._update_layout()
 
     def _draw_background(self):
         """Draw the circular background."""
@@ -107,56 +65,74 @@ class CenterDisplay(Widget):
                 size=(self.radius * 2, self.radius * 2),
             )
 
-    def _create_labels(self):
-        """Create the octave and note labels."""
-        self._octave_label = Label(
-            text=f"OCT {self.octave}",
-            font_size="32sp",
+    def _make_btn(self, text, callback, width=50):
+        """Create a styled button."""
+        btn = Button(
+            text=text,
+            size_hint=(None, 1),
+            width=width,
+            background_color=COLORS["button_normal"],
             color=COLORS["text"],
+            font_size="18sp",
             bold=True,
         )
-        self.add_widget(self._octave_label)
+        btn.bind(on_release=callback)
+        return btn
 
-        self._note_label = Label(
-            text="",
-            font_size="24sp",
-            color=COLORS["text_dim"],
-        )
-        self.add_widget(self._note_label)
-
-    def _create_buttons(self):
-        """Create octave up/down buttons."""
-        btn_radius = 35
-
-        self._btn_up = CircleButton(radius=btn_radius, text="+")
-        self._btn_up.bind(on_release=self._on_octave_up)
-        self.add_widget(self._btn_up)
-
-        # Add label for up button
-        self._btn_up_label = Label(
-            text="+",
-            font_size="28sp",
-            color=COLORS["text"],
+    def _make_label(self, text, color=None, font_size="20sp"):
+        """Create a styled label."""
+        return Label(
+            text=text,
+            color=color or COLORS["text"],
+            font_size=font_size,
             bold=True,
+            size_hint=(1, 1),
+            halign="center",
+            valign="middle",
         )
-        self.add_widget(self._btn_up_label)
 
-        self._btn_down = CircleButton(radius=btn_radius, text="-")
-        self._btn_down.bind(on_release=self._on_octave_down)
-        self.add_widget(self._btn_down)
-
-        # Add label for down button
-        self._btn_down_label = Label(
-            text="-",
-            font_size="32sp",
-            color=COLORS["text"],
-            bold=True,
+    def _create_layout(self):
+        """Create the main layout with all controls."""
+        # Main vertical layout
+        self._layout = BoxLayout(
+            orientation='vertical',
+            spacing=5,
+            padding=[10, 15, 10, 15],
         )
-        self.add_widget(self._btn_down_label)
 
-    def _update_positions(self, *args):
-        """Update positions of all elements."""
-        if not self._setup_done:
+        # Row 1: Root note < C >
+        row1 = BoxLayout(orientation='horizontal', size_hint=(1, 1), spacing=5)
+        row1.add_widget(self._make_btn("<", self._on_root_prev))
+        self._root_label = self._make_label(NOTE_NAMES[self.root_note], COLORS["accent"])
+        row1.add_widget(self._root_label)
+        row1.add_widget(self._make_btn(">", self._on_root_next))
+        self._layout.add_widget(row1)
+
+        # Row 2: Scale < Chromatic >
+        row2 = BoxLayout(orientation='horizontal', size_hint=(1, 1), spacing=5)
+        row2.add_widget(self._make_btn("<", self._on_scale_prev))
+        self._scale_label = self._make_label(SCALES[self.scale_key][0], COLORS["accent"])
+        row2.add_widget(self._scale_label)
+        row2.add_widget(self._make_btn(">", self._on_scale_next))
+        self._layout.add_widget(row2)
+
+        # Row 3: Octave - OCT 4 +
+        row3 = BoxLayout(orientation='horizontal', size_hint=(1, 1), spacing=5)
+        row3.add_widget(self._make_btn("-", self._on_octave_down))
+        self._octave_label = self._make_label(f"OCT {self.octave}", COLORS["text"])
+        row3.add_widget(self._octave_label)
+        row3.add_widget(self._make_btn("+", self._on_octave_up))
+        self._layout.add_widget(row3)
+
+        # Row 4: Note display
+        self._note_label = self._make_label("", COLORS["text_dim"], "18sp")
+        self._layout.add_widget(self._note_label)
+
+        self.add_widget(self._layout)
+
+    def _update_layout(self, *args):
+        """Update layout position and size."""
+        if not self._setup_done or not self._layout:
             return
 
         cx, cy = self.center_x, self.center_y
@@ -166,56 +142,57 @@ class CenterDisplay(Widget):
             self._bg_ellipse.pos = (cx - self.radius, cy - self.radius)
             self._bg_ellipse.size = (self.radius * 2, self.radius * 2)
 
-        # Position labels
-        if self._octave_label:
-            self._octave_label.center_x = cx
-            self._octave_label.center_y = cy + 20
+        # Position layout in center, sized to fit within circle
+        layout_size = self.radius * 1.4  # Use ~70% of diameter
+        self._layout.size = (layout_size, layout_size)
+        self._layout.center = (cx, cy)
 
-        if self._note_label:
-            self._note_label.center_x = cx
-            self._note_label.center_y = cy - 20
+    # Root note controls
+    def _on_root_prev(self, *args):
+        self.root_note = (self.root_note - 1) % 12
+        self._root_label.text = NOTE_NAMES[self.root_note]
+        if self.on_scale_change:
+            self.on_scale_change(self.scale_key, self.root_note)
 
-        # Position buttons (left and right of center)
-        btn_offset = self.radius * 0.55
-        if self._btn_up:
-            self._btn_up.center_x = cx + btn_offset
-            self._btn_up.center_y = cy
-            self._btn_up._update()
+    def _on_root_next(self, *args):
+        self.root_note = (self.root_note + 1) % 12
+        self._root_label.text = NOTE_NAMES[self.root_note]
+        if self.on_scale_change:
+            self.on_scale_change(self.scale_key, self.root_note)
 
-        if self._btn_up_label:
-            self._btn_up_label.center_x = cx + btn_offset
-            self._btn_up_label.center_y = cy
+    # Scale type controls
+    def _on_scale_prev(self, *args):
+        current_index = SCALE_ORDER.index(self.scale_key)
+        prev_index = (current_index - 1) % len(SCALE_ORDER)
+        self.scale_key = SCALE_ORDER[prev_index]
+        self._scale_label.text = SCALES[self.scale_key][0]
+        if self.on_scale_change:
+            self.on_scale_change(self.scale_key, self.root_note)
 
-        if self._btn_down:
-            self._btn_down.center_x = cx - btn_offset
-            self._btn_down.center_y = cy
-            self._btn_down._update()
+    def _on_scale_next(self, *args):
+        current_index = SCALE_ORDER.index(self.scale_key)
+        next_index = (current_index + 1) % len(SCALE_ORDER)
+        self.scale_key = SCALE_ORDER[next_index]
+        self._scale_label.text = SCALES[self.scale_key][0]
+        if self.on_scale_change:
+            self.on_scale_change(self.scale_key, self.root_note)
 
-        if self._btn_down_label:
-            self._btn_down_label.center_x = cx - btn_offset
-            self._btn_down_label.center_y = cy
-
+    # Octave controls
     def _on_octave_up(self, *args):
-        """Increase octave."""
         if self.octave < MAX_OCTAVE:
             self.octave += 1
-            self._update_octave_display()
+            self._octave_label.text = f"OCT {self.octave}"
             if self.on_octave_change:
                 self.on_octave_change(self.octave)
 
     def _on_octave_down(self, *args):
-        """Decrease octave."""
         if self.octave > MIN_OCTAVE:
             self.octave -= 1
-            self._update_octave_display()
+            self._octave_label.text = f"OCT {self.octave}"
             if self.on_octave_change:
                 self.on_octave_change(self.octave)
 
-    def _update_octave_display(self):
-        """Update the octave label."""
-        if self._octave_label:
-            self._octave_label.text = f"OCT {self.octave}"
-
+    # Note display
     def show_note(self, note_name: str):
         """Display the last played note."""
         self.last_note = note_name
@@ -227,3 +204,12 @@ class CenterDisplay(Widget):
         self.last_note = ""
         if self._note_label:
             self._note_label.text = ""
+
+    def set_scale(self, scale_key: str, root_note: int):
+        """Set the scale and root note externally."""
+        self.scale_key = scale_key
+        self.root_note = root_note
+        if self._root_label:
+            self._root_label.text = NOTE_NAMES[self.root_note]
+        if self._scale_label:
+            self._scale_label.text = SCALES[self.scale_key][0]

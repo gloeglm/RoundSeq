@@ -71,10 +71,16 @@ The app auto-detects the environment and configures accordingly:
 ┌─────────────────────────────────────────────────────────┐
 │                    Kivy Application                     │
 ├─────────────────────────────────────────────────────────┤
+│  Modes (different ways to use the device)               │
+│  ├── Direct Play     - circular keyboard (current)      │
+│  ├── Step Sequencer  - circular step sequencer (future) │
+│  └── [Other modes]   - additional MIDI generators       │
+├─────────────────────────────────────────────────────┤
 │  Screens                                                │
-│  ├── NotePlayScreen (initial milestone)                 │
+│  ├── DirectPlayScreen (was NotePlayScreen)              │
 │  ├── SequencerScreen (future)                           │
-│  └── SettingsScreen (future)                            │
+│  ├── SettingsScreen (future)                            │
+│  └── ModeSelectScreen (future - switch between modes)   │
 ├─────────────────────────────────────────────────────────┤
 │  Custom Widgets                                         │
 │  ├── CircularSafeArea    - constrains content to circle │
@@ -84,6 +90,7 @@ The app auto-detects the environment and configures accordingly:
 ├─────────────────────────────────────────────────────────┤
 │  Services                                               │
 │  ├── MidiService         - mido wrapper, port mgmt      │
+│  ├── ScaleService        - scale/root note definitions  │
 │  └── ConfigService       - user preferences (future)    │
 └─────────────────────────────────────────────────────────┘
 ```
@@ -143,11 +150,12 @@ Safe area calculations:
 - [x] Setup documentation (docs/PI_SETUP.md)
 - [x] RtmidiService implementation (real MIDI out)
 - [x] Auto-start systemd service
-- [ ] Test with Pisound and external synth (requires Pisound HAT)
+- [x] Test with Pisound and external synth
 
-### Milestone 2: Visual Feedback and Polish
+### Milestone 2: Scale Selection & Visual Polish
+- [ ] Scale and root note selection UI (below octave controls in center)
+- [ ] Dynamic key count based on scale (e.g., 7 keys for major scale, 5 for pentatonic)
 - [ ] Button press animations (color change, scale)
-- [ ] Velocity sensitivity (touch duration or pressure if available)
 - [ ] Visual feedback for active notes
 - [ ] Configurable color schemes
 
@@ -336,10 +344,10 @@ Standard MIDI note numbers:
 
 ## Open Questions
 
-- Velocity control method: touch duration, touch area size, or fixed?
-- Scale mode: chromatic only, or selectable scales?
+- Velocity control method: touch duration, touch area size, or fixed? (Note: display has no pressure sensitivity)
 - Visual theme: dark mode default for OLED-like appearance?
 - Sequencer grid layout: how to adapt step grid to circular display?
+- Mode switching UX: dedicated button, swipe gesture, or center-tap menu?
 
 ## References
 
